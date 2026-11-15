@@ -145,8 +145,7 @@ requests and timing, with API cost information when the provider returns it.
 
 ## Run locally
 
-Use **Node.js 24**. This source distribution includes no real API keys or
-prebuilt output. Install dependencies and configure the server credential:
+Use **Node.js 24**. Install dependencies and configure the server credential:
 
 ```sh
 npm ci
@@ -176,7 +175,7 @@ npm start
 The default standalone address is `http://localhost:3000`. Keep the Exa key on
 the server. The supplied ignore rules exclude `.env` and `.dev.vars` from Git.
 
-## Run with Docker
+## Run with Docker or deploy on Render
 
 With a configured `.env` file:
 
@@ -184,121 +183,20 @@ With a configured `.env` file:
 docker compose up -d --build
 ```
 
-Open `http://localhost:3000`. Use `docker compose down` to stop the service.
-
-## Deploy on Render
-
-The repository contains a Dockerfile and an optional `render.yaml` Blueprint.
-For the existing PlanB service, keep that service and use the following settings.
-Committing a Blueprint file alone does not convert a manually created service
-into a Blueprint-managed service.
-
-| Setting | Value |
-| --- | --- |
-| Service type | Web Service |
-| Runtime | Docker |
-| Branch | `main` |
-| Root Directory | Empty when `package.json` is at the repository root |
-| Dockerfile Path | `./Dockerfile` |
-| Docker Build Context Directory | `.` |
-| Docker Command | Empty; the image starts with `npm start` |
-| Health Check Path | `/api/config` |
-| Compute plan | Free, if available for your account |
-
-In the service's **Environment** page, set:
+For Render, create a Web Service with the **Docker** runtime and use these
+environment variables:
 
 | Variable | Value |
 | --- | --- |
-| `EXA_API_KEY` | A new, private Exa credential |
+| `EXA_API_KEY` | Your private server credential |
 | `HOST` | `0.0.0.0` |
 | `PORT` | `10000` |
 
-Keep the actual value out of source files, Git commits and `render.yaml`.
-The Blueprint uses `sync: false` so you supply the secret privately during its
-initial setup. For an existing service, add or update it in Environment.
-
-After publishing the clean source, choose **Manual Deploy > Deploy latest
-commit** if an automatic deployment has not started. A restart of an old
-deployment uses its existing build. Check that the checkout SHA in Render's
-logs matches your new Git commit and that startup reports version **1.3.1**.
-
-Open `/api/config` on your deployed URL. With a configured credential it should
-return `{"status":"ready","version":"1.3.1"}`. This endpoint checks that a key
-is configured; it does not make a paid provider request or validate the key.
-Then try a real question to verify Exa connectivity and account access.
-
-The Dockerfile explicitly gives user `node` ownership of `/app` and uses
-`/tmp/planb-runtime` and `/tmp/planb-config` for writable runtime state. This
-retains the fix for `EACCES` when Wrangler starts. The server listens on
-`0.0.0.0` and the configured `PORT`. The launcher creates a private runtime
-secret file beside the built worker; it is excluded from source and browser
-assets.
-
-GitHub Pages cannot run the included backend. Render runs the backend that
-holds the Exa credential. Hosting and Exa have separate usage allowances.
-
-Deployment references: [Render Docker services](https://render.com/docs/docker),
-[environment variables](https://render.com/docs/configure-environment-variables)
-and [Blueprint specification](https://render.com/docs/blueprint-spec).
-
-## Publish clean source without the old Git history
-
-Rotate any credential previously committed or shared before publishing.
-Removing a token from a new commit does not remove it from previous commits.
-
-Extract this clean ZIP into a **new folder**, separate from your existing clone.
-The following PowerShell commands publish the complete application as a new
-root commit. They replace `main` and discard its old commit history. Do not run
-them inside an old checkout or merge the old history afterward.
-
-Run one command at a time and stop if a command fails:
-
-```powershell
-Set-Location E:\PycharmProjects\planb-render-clean
-git init --initial-branch=main
-git add .
-git status --short
-git commit -m "publish clean render-ready source"
-git remote add origin https://github.com/BoberISintelligent/PlanB.git
-$remoteMain = git ls-remote origin refs/heads/main
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remoteMain)) { throw "Cannot read remote main; stop here." }
-$expected = ($remoteMain -split '\s+')[0]
-git push "--force-with-lease=refs/heads/main:$expected" origin main
-```
-
-The explicit lease prevents replacing a `main` that changed after its SHA was
-read. If it fails, inspect the new remote changes before repeating the process.
-Branch protection can also block the update.
-
-Other branches and tags can still retain the old commits. After a successful
-push, these commands delete **all remote branches except `main`, and all tags**.
-Use them only when those refs are disposable; otherwise clean each retained
-branch separately before publishing it.
-
-```powershell
-git ls-remote --heads origin | ForEach-Object {
-    $parts = $_ -split '\s+'
-    $sha = $parts[0]
-    $ref = $parts[1]
-    if ($ref -ne 'refs/heads/main') {
-        git push "--force-with-lease=${ref}:$sha" origin ":$ref"
-        if ($LASTEXITCODE -ne 0) { throw "Could not remove $ref; stop here." }
-    }
-}
-git ls-remote --tags --refs origin | ForEach-Object {
-    $parts = $_ -split '\s+'
-    $sha = $parts[0]
-    $ref = $parts[1]
-    git push "--force-with-lease=${ref}:$sha" origin ":$ref"
-    if ($LASTEXITCODE -ne 0) { throw "Could not remove $ref; stop here." }
-}
-```
-
-Afterward, work from the new folder or a fresh clone. Old clones can reintroduce
-the removed history. A history rewrite cannot erase other people's copies,
-forks, cached commit views or GitHub pull-request refs. See
-[GitHub's sensitive-data cleanup guidance](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)
-for these limits and the conditions for further GitHub Support assistance.
+Set the health check path to `/api/config`. The Dockerfile uses an unprivileged
+user and writable temporary directories for runtime state. The included
+`render.yaml` supplies an optional Blueprint with a private-secret placeholder.
+For an existing service, update `EXA_API_KEY` in Render Environment and deploy
+the latest commit. See [the local launch guide](#run-locally) for local setup.
 
 ## Project structure
 
@@ -320,8 +218,7 @@ for these limits and the conditions for further GitHub Support assistance.
 | `scripts/serve-standalone.mjs` | Portable launcher for the built worker |
 | `Dockerfile`, `compose.yaml` | Container build and local deployment |
 | `render.yaml` | Optional Render Blueprint with a private-secret placeholder |
-| `README.md` | Product usage, deployment, verification and AI-use notes |
-| `vendor/` | Bundled UI stylesheet and its preserved third-party license |
+| `README.md` | Product usage, deployment and AI-use notes |
 
 The stack is **TypeScript, React, Vinext/Vite and Exa**, with a Cloudflare
 Workers-compatible backend running through workerd in the Docker deployment.
@@ -337,25 +234,7 @@ npm run build
 
 Tests cover source and action-link handling, time zones and calendar export,
 research failures, anonymous access, conversation validation, context isolation
-and startup permissions. The previous conversation-memory release passed 37
-tests, type checking and a production build. A live Exa development check
-resolved a follow-up about Helsinki printing and scanning from its conversation
-context and returned 5 sources and 5 steps. That single run is not a latency or
-accuracy benchmark.
-
-For this source-only packaging update, tests, type checking and the build were
-run again. The distribution was checked for the previously supplied credential,
-private configuration files and unexpected Markdown files. Only this root
-README is shipped as Markdown; the third-party license remains in a text file.
-Dependencies bring their own documentation when installed locally.
-
-Docker execution was not available in the authoring workspace. Linux regression
-tests check the startup permission fix; Windows skips the two Linux-specific
-permission tests. An attempted local Wrangler startup stopped with
-`uv_interface_addresses returned Unknown system error 1`, so an HTTP readiness
-check of the built server could not be completed here. Publication to the
-GitHub repository and deployment to the user's Render service remain operator
-actions.
+and startup permissions.
 
 ## AI use
 
