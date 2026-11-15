@@ -1,0 +1,20 @@
+# Optional Blueprint for provisioning the Docker web service.
+# Existing manually configured services can keep using the settings in README.
+services:
+  - type: web
+    name: PlanB
+    runtime: docker
+    branch: main
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    healthCheckPath: /api/config
+    envVars:
+      - key: EXA_API_KEY
+        sync: false
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
